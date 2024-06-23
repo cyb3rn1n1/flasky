@@ -1,0 +1,64 @@
+name: Flasky
+run-name: Build & deploy Flasky
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  build_and_deploy:
+    runs-on: kuby-runner-set
+    steps:
+      - 
+        name: 1. Checkout flasky repository
+        uses: actions/checkout@v4
+      - 
+        name: 2. Install Docker
+        uses: docker/setup-buildx-action@v3
+      - 
+        name: 3. Update & install default OS binaries (curl...)
+        run: |
+          sudo apt update -y
+          sudo apt install -y curl unzip
+      - 
+        name: 4. Install AWS CLI v2
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+      - 
+        name: 5. Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION_ID }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      - 
+        name: 6. Login to ECR registry
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - 
+        name: 7. Build, tag, and push docker image to Amazon ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: kuby-flasky
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY .
+          docker push $REGISTRY/$REPOSITORY
+      - 
+        name: 8. Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.27.1'
+      - 
+        name: 9. Update kubeconfig
+        run: |
+              mkdir -p $HOME/.kube
+              cat /dev/null > $HOME/.kube/config
+              aws eks update-kubeconfig --region ${{ secrets.AWS_REGION_ID }} --name ${{ secrets.K8S_EKS_NAME }}
+      - 
+        name: 9. Rotate Flasky deployment
+        run: kubectl set image --namespace default deployments/flasky-app flasky-app=${{ steps.login-ecr.outputs.registry }}/kuby-flasky
+      
